@@ -31,9 +31,9 @@ def entrenar_modelo_acustico(encoder, attention, decoder,
 
         enc_salida = encoder(indices)
 
-        batch_size     = indices.shape[0]
-        h              = torch.zeros(batch_size, decoder.hidden_dim).to(device)
-        c              = torch.zeros(batch_size, decoder.hidden_dim).to(device)
+        batch_size = indices.shape[0]
+        h = torch.zeros(batch_size, decoder.hidden_dim).to(device)
+        c  = torch.zeros(batch_size, decoder.hidden_dim).to(device)
         frame_anterior = torch.zeros(batch_size, decoder.n_mels).to(device)
 
         frames = []
@@ -87,7 +87,6 @@ def entrenar_hifigan(generador, discriminador,
 
         _, mel_real, _, _ = batch
         mel_real = mel_real.to(device)
-        # mel_real → (batch, n_mels, T)  ya en el formato correcto para HiFi-GAN
 
         # audio real para el discriminador
         # en producción vendría del dataset directamente
@@ -203,15 +202,13 @@ def main():
               decoder.parameters()),
         lr=LR_ACUSTICO
     )
-    opt_gen  = torch.optim.Adam(generador.parameters(),     lr=LR_HIFIGAN)
-    opt_disc = torch.optim.Adam(discriminador.parameters(), lr=LR_HIFIGAN)
-
+    
     # ── cargar checkpoint si existe ───────────────────────────
     epoch_inicio = cargar_checkpoint(
         CHECKPOINT,
         encoder, attention, decoder,
         generador, discriminador,
-        opt_acustico, opt_gen, opt_disc
+        opt_acustico
     )
 
     # ── dataset y dataloader ──────────────────────────────────
@@ -237,13 +234,6 @@ def main():
         entrenar_modelo_acustico(
             encoder, attention, decoder,
             dataloader, opt_acustico,
-            device, epoch
-        )
-
-        entrenar_hifigan(
-            generador, discriminador,
-            dataloader,
-            opt_gen, opt_disc,
             device, epoch
         )
 
