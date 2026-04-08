@@ -3,12 +3,14 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from itertools import chain
 import os
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from src.data.text    import VOCAB_SIZE
 from src.data.dataset import TTSDataset, collate_fn
 from src.pipeline.encoder   import Encoder
 from src.pipeline.attention import Attention
 from src.pipeline.decoder   import Decoder
+
 
 
 def entrenar_modelo_acustico(encoder, attention, decoder,
@@ -51,7 +53,7 @@ def entrenar_modelo_acustico(encoder, attention, decoder,
         perdida = loss_fn(mel_generado, mel_real_t)
 
         optimizador.zero_grad()
-        perdida.backward()
+        perdida.backward(
         nn.utils.clip_grad_norm_(
             list(encoder.parameters()) +
             list(attention.parameters()) +
@@ -77,6 +79,7 @@ def guardar_checkpoint(ruta, epoch, encoder, attention,
         'attention':    attention.state_dict(),
         'decoder':      decoder.state_dict(),
         'opt_acustico': opt_acustico.state_dict(),
+        'scheduler':    scheduler.state_dict(),
     }, ruta)
     print(f'Checkpoint guardado: {ruta}')
 
@@ -87,6 +90,9 @@ def cargar_checkpoint(ruta, encoder, attention,
     if not os.path.exists(ruta):
         print(f'No existe checkpoint — empezando desde cero')
         return 0
+    
+    if 'scheduler' in checkpoint:
+        scheduler.load_state_dict(checkpoint['scheduler'])
 
     checkpoint = torch.load(ruta, weights_only=True)
     encoder.load_state_dict(checkpoint['encoder'])
@@ -127,6 +133,15 @@ def main():
         lr=LR
     )
 
+    # ── scheduler ────────────────────────────────────────────────
+    scheduler = ReduceLROnPlateau(
+        opt_acustico,
+        mode='min',      
+        factor=0.5,      
+        patience=5,      
+        verbose=True     
+    )
+
     # ── cargar checkpoint si existe ───────────────────────────
     epoch_inicio = cargar_checkpoint(
         CHECKPOINT,
@@ -159,6 +174,8 @@ def main():
             dataloader, opt_acustico,
             device, epoch
         )
+
+        scheduler.step(perdida)
 
         if epoch % 5 == 0:
             guardar_checkpoint(
