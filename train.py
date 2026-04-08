@@ -12,7 +12,6 @@ from src.pipeline.attention import Attention
 from src.pipeline.decoder   import Decoder
 
 
-
 def entrenar_modelo_acustico(encoder, attention, decoder,
                               dataloader, optimizador,
                               device, epoch):
@@ -70,8 +69,8 @@ def entrenar_modelo_acustico(encoder, attention, decoder,
 
 
 def guardar_checkpoint(ruta, epoch, encoder, attention,
-                       decoder, opt_acustico):
-
+                       decoder, opt_acustico, scheduler):
+    # ── scheduler añadido como parámetro ──────────────────────
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
     torch.save({
         'epoch':        epoch,
@@ -85,20 +84,22 @@ def guardar_checkpoint(ruta, epoch, encoder, attention,
 
 
 def cargar_checkpoint(ruta, encoder, attention,
-                      decoder, opt_acustico):
+                      decoder, opt_acustico, scheduler):
+    # ── scheduler añadido como parámetro ──────────────────────
 
     if not os.path.exists(ruta):
         print(f'No existe checkpoint — empezando desde cero')
         return 0
-    
-    if 'scheduler' in checkpoint:
-        scheduler.load_state_dict(checkpoint['scheduler'])
 
+    # ── primero cargar, luego usar ────────────────────────────
     checkpoint = torch.load(ruta, weights_only=True)
     encoder.load_state_dict(checkpoint['encoder'])
     attention.load_state_dict(checkpoint['attention'])
     decoder.load_state_dict(checkpoint['decoder'])
     opt_acustico.load_state_dict(checkpoint['opt_acustico'])
+
+    if 'scheduler' in checkpoint:
+        scheduler.load_state_dict(checkpoint['scheduler'])
 
     epoch = checkpoint['epoch']
     print(f'Checkpoint cargado — continuando desde época {epoch}')
@@ -133,19 +134,19 @@ def main():
         lr=LR
     )
 
-    # ── scheduler ────────────────────────────────────────────────
+    # ── scheduler ─────────────────────────────────────────────
     scheduler = ReduceLROnPlateau(
         opt_acustico,
-        mode='min',      
-        factor=0.5,      
-        patience=5,      
+        mode='min',
+        factor=0.5,
+        patience=5,
     )
 
     # ── cargar checkpoint si existe ───────────────────────────
     epoch_inicio = cargar_checkpoint(
         CHECKPOINT,
         encoder, attention, decoder,
-        opt_acustico
+        opt_acustico, scheduler    # ← scheduler incluido
     )
 
     # ── dataset y dataloader ──────────────────────────────────
@@ -159,7 +160,7 @@ def main():
         pin_memory=True
     )
 
-    print(f'Dataset:          {len(dataset)} muestras')
+    print(f'Dataset:           {len(dataset)} muestras')
     print(f'Batches por época: {len(dataloader)}')
 
     # ── bucle de épocas ───────────────────────────────────────
@@ -168,19 +169,24 @@ def main():
         print(f'Época {epoch}/{EPOCHS}')
         print(f'{"="*50}')
 
-        entrenar_modelo_acustico(
+        # ── guardar pérdida para pasarla al scheduler ─────────
+        perdida = entrenar_modelo_acustico(
             encoder, attention, decoder,
             dataloader, opt_acustico,
             device, epoch
         )
 
+        # ── scheduler usa la pérdida para decidir si bajar LR ─
         scheduler.step(perdida)
+
+        lr_actual = opt_acustico.param_groups[0]['lr']
+        print(f'Learning rate: {lr_actual:.6f}')
 
         if epoch % 5 == 0:
             guardar_checkpoint(
                 CHECKPOINT,
                 epoch, encoder, attention, decoder,
-                opt_acustico
+                opt_acustico, scheduler    # ← scheduler incluido
             )
 
 
