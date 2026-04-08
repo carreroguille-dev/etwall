@@ -186,7 +186,7 @@ def main():
             guardar_checkpoint(
                 CHECKPOINT,
                 epoch, encoder, attention, decoder,
-                opt_acustico, scheduler    # ← scheduler incluido
+                opt_acustico, scheduler    
             )
 
 
