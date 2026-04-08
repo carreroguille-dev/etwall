@@ -160,7 +160,7 @@ def main():
             device, epoch
         )
 
-        if epoch % 10 == 0:
+        if epoch % 5 == 0:
             guardar_checkpoint(
                 CHECKPOINT,
                 epoch, encoder, attention, decoder,
