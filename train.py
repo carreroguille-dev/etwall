@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from itertools import chain
 import os
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from datetime import datetime
 
 from src.data.text    import VOCAB_SIZE
 from src.data.dataset import TTSDataset, collate_fn
@@ -70,7 +71,7 @@ def entrenar_modelo_acustico(encoder, attention, decoder,
 
 def guardar_checkpoint(ruta, epoch, encoder, attention,
                        decoder, opt_acustico, scheduler):
-    # ── scheduler añadido como parámetro ──────────────────────
+
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
     torch.save({
         'epoch':        epoch,
@@ -85,13 +86,11 @@ def guardar_checkpoint(ruta, epoch, encoder, attention,
 
 def cargar_checkpoint(ruta, encoder, attention,
                       decoder, opt_acustico, scheduler):
-    # ── scheduler añadido como parámetro ──────────────────────
 
     if not os.path.exists(ruta):
         print(f'No existe checkpoint — empezando desde cero')
         return 0
 
-    # ── primero cargar, luego usar ────────────────────────────
     checkpoint = torch.load(ruta, weights_only=True)
     encoder.load_state_dict(checkpoint['encoder'])
     attention.load_state_dict(checkpoint['attention'])
@@ -135,18 +134,22 @@ def main():
     )
 
     # ── scheduler ─────────────────────────────────────────────
+    # threshold=1e-4 → solo considera mejora si la pérdida baja más de 0.0001
+    # evita que mejoras mínimas reinicien el contador de paciencia
     scheduler = ReduceLROnPlateau(
         opt_acustico,
         mode='min',
         factor=0.5,
         patience=5,
+        threshold=1e-4,
+        threshold_mode='abs'
     )
 
     # ── cargar checkpoint si existe ───────────────────────────
     epoch_inicio = cargar_checkpoint(
         CHECKPOINT,
         encoder, attention, decoder,
-        opt_acustico, scheduler    # ← scheduler incluido
+        opt_acustico, scheduler
     )
 
     # ── dataset y dataloader ──────────────────────────────────
@@ -165,28 +168,30 @@ def main():
 
     # ── bucle de épocas ───────────────────────────────────────
     for epoch in range(epoch_inicio + 1, EPOCHS + 1):
+
+        hora_inicio = datetime.now().strftime('%H:%M:%S')
         print(f'\n{"="*50}')
-        print(f'Época {epoch}/{EPOCHS}')
+        print(f'Época {epoch}/{EPOCHS}  —  inicio: {hora_inicio}')
         print(f'{"="*50}')
 
-        # ── guardar pérdida para pasarla al scheduler ─────────
         perdida = entrenar_modelo_acustico(
             encoder, attention, decoder,
             dataloader, opt_acustico,
             device, epoch
         )
 
-        # ── scheduler usa la pérdida para decidir si bajar LR ─
         scheduler.step(perdida)
 
-        lr_actual = opt_acustico.param_groups[0]['lr']
+        lr_actual  = opt_acustico.param_groups[0]['lr']
+        hora_fin   = datetime.now().strftime('%H:%M:%S')
         print(f'Learning rate: {lr_actual:.6f}')
+        print(f'Fin época:     {hora_fin}')
 
         if epoch % 5 == 0:
             guardar_checkpoint(
                 CHECKPOINT,
                 epoch, encoder, attention, decoder,
-                opt_acustico, scheduler    
+                opt_acustico, scheduler
             )
 
 
