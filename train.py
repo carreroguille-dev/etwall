@@ -53,7 +53,7 @@ def entrenar_modelo_acustico(encoder, attention, decoder,
         perdida = loss_fn(mel_generado, mel_real_t)
 
         optimizador.zero_grad()
-        perdida.backward(
+        perdida.backward()
         nn.utils.clip_grad_norm_(
             list(encoder.parameters()) +
             list(attention.parameters()) +
